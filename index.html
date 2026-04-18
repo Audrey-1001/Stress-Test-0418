@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>心理压力测评 (MBTI风格)</title>
+    <style>
+        :root {
+            --primary-color: #6c5ce7;
+            --bg-gradient: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            --card-bg: #ffffff;
+            --text-main: #2d3436;
+            --text-muted: #636e72;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'PingFang SC', system-ui, sans-serif;
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 框架布局 */
+        .container {
+            width: 90%;
+            max-width: 500px; /* 框架宽度 */
+            background: var(--card-bg);
+            padding: 40px 25px;
+            border-radius: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+            overflow: hidden;
+            position: relative;
+        }
+
+        h1 { font-size: 22px; text-align: center; color: var(--primary-color); margin-bottom: 10px; }
+        .desc { font-size: 14px; text-align: center; color: var(--text-muted); margin-bottom: 25px; }
+
+        /* 丝滑进度条 */
+        .progress-container { height: 6px; background: #eee; border-radius: 10px; margin-bottom: 30px; }
+        .progress-fill { 
+            height: 100%; width: 0%; background: var(--primary-color); 
+            border-radius: 10px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+
+        /* 题目容器与动画 */
+        .quiz-area { position: relative; min-height: 320px; }
+        .question-card {
+            position: absolute; width: 100%; visibility: hidden; opacity: 0;
+            transform: translateX(40px); transition: all 0.4s ease;
+        }
+        .question-card.active { visibility: visible; opacity: 1; transform: translateX(0); }
+        .question-card.exit { visibility: hidden; opacity: 0; transform: translateX(-40px); }
+
+        .q-text { font-size: 18px; font-weight: 600; margin-bottom: 20px; line-height: 1.4; }
+
+        /* 选项样式 */
+        .option {
+            display: block; width: 100%; padding: 15px 20px; margin-bottom: 12px;
+            border: 1.5px solid #f0f0f0; border-radius: 12px; background: #fff;
+            cursor: pointer; font-size: 15px; text-align: left; transition: all 0.2s;
+        }
+        .option:hover { border-color: var(--primary-color); background: #f9f8ff; }
+        .option:active { background: var(--primary-color); color: #fff; transform: scale(0.98); }
+
+        /* 结果页 */
+        #result { display: none; text-align: center; animation: fadeIn 0.6s ease; }
+        .type-code { font-size: 48px; font-weight: 800; color: var(--primary-color); letter-spacing: 4px; margin: 15px 0; }
+        .advice { background: #f8f9fa; padding: 20px; border-radius: 15px; text-align: left; line-height: 1.6; }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="quiz-box">
+        <h1 id="title">心理压力测评</h1>
+        <div class="desc">通过30道题评估你的情绪、行为、认知和社交压力</div>
+        <div class="progress-container"><div class="progress-fill" id="progress"></div></div>
+        <div class="quiz-area" id="quiz-area"></div>
+    </div>
+
+    <div id="result">
+        <h1>测评报告</h1>
+        <div class="type-code" id="res-code"></div>
+        <div class="advice" id="res-text"></div>
+        <button class="option" style="margin-top:25px; text-align:center;" onclick="location.reload()">重新测试</button>
+    </div>
+</div>
+
+<script>
+    const data = {
+        scoring: {
+            dims: { emotion: [1,8], behavior: [9,16], cognition: [17,24], social: [25,30] },
+            thresholds: { emotion: 16, behavior: 16, cognition: 16, social: 12 },
+            map: { emotion:['E','H'], behavior:['B','D'], cognition:['C','R'], social:['S','T'] },
+            texts: {
+                "EBCS": "压力低，全方位适应良好。建议：继续保持健康生活习惯，可适当挑战自我。",
+                "EBCR": "压力中等，行为和认知略受影响。建议：调整时间管理，设定小目标，适度休息。",
+                "HDRT": "压力极高，各维度明显受影响。建议：尽快寻求专业心理咨询，建立情绪支持。",
+                "HBRT": "压力较高，情绪与认知受影响。建议：关注睡眠、饮食、运动，记录压力源。",
+                "other": "压力水平中等，请关注自己的情绪和行为状态，适当放松与运动。"
+            }
+        },
+        questions: [
+            {id:1, dim:"emotion", text:"面对紧急任务，你会怎样反应？", opts:["保持冷静，按计划处理","有些紧张，但还能完成","焦虑明显，需要休息调整","紧张到无法集中注意力"]},
+            {id:2, dim:"emotion", text:"遇到生活琐事，你的心情如何？", opts:["基本不受影响","偶尔烦躁","经常感到烦心","总是情绪低落或易怒"]},
+            {id:3, dim:"emotion", text:"工作或学习中遇到压力时，你的睡眠？", opts:["正常","偶尔失眠","经常难以入睡","几乎总失眠"]},
+            {id:4, dim:"emotion", text:"面对未来的不确定性，你的感受？", opts:["很少担心","偶尔担心","经常焦虑","总是担心，难以放松"]},
+            {id:5, dim:"emotion", text:"遇到挫折，你会？", opts:["很快调整心态","需要一些时间缓解","情绪低落一段时间","长时间无法摆脱情绪困扰"]},
+            {id:6, dim:"emotion", text:"与他人发生争执，你的情绪反应？", opts:["冷静处理","会生气但控制得住","情绪容易失控","很难控制情绪"]},
+            {id:7, dim:"emotion", text:"当任务繁重时，你感觉？", opts:["挑战感十足","有压力，但能完成","压力大，难以集中","极度紧张，难以行动"]},
+            {id:8, dim:"emotion", text:"日常生活中，你的情绪起伏？", opts:["稳定","偶尔波动","经常波动","总是情绪不稳"]},
+            {id:9, dim:"behavior", text:"你完成任务的方式？", opts:["按计划，效率高","有时拖延","经常拖延","总是拖延或半途而废"]},
+            {id:10, dim:"behavior", text:"压力下你的饮食情况？", opts:["正常","偶尔变化","经常不规律","明显紊乱"]},
+            {id:11, dim:"behavior", text:"压力时你的运动习惯？", opts:["保持规律","有时减少","经常不运动","基本停止"]},
+            {id:12, dim:"behavior", text:"压力下的社交状态？", opts:["正常交往","偶尔回避","经常回避","很少与人接触"]},
+            {id:13, dim:"behavior", text:"压力时的冲动行为？", opts:["很少","偶尔","经常","总是"]},
+            {id:14, dim:"behavior", text:"处理琐事的态度？", opts:["井井有条","有时混乱","经常混乱","难以整理"]},
+            {id:15, dim:"behavior", text:"压力对你作息的影响？", opts:["基本不影响","偶尔影响","经常影响","影响严重"]},
+            {id:16, dim:"behavior", text:"压力下的注意力？", opts:["集中","偶尔分散","经常分散","几乎无法集中"]},
+            {id:17, dim:"cognition", text:"做决策时，你的状态？", opts:["冷静分析","有时犹豫","经常犹豫","难以做出决定"]},
+            {id:18, dim:"cognition", text:"遇到复杂问题，你的思路？", opts:["清晰","有时混乱","经常混乱","总是卡住"]},
+            {id:19, dim:"cognition", text:"压力下的记忆力？", opts:["正常","偶尔遗忘","经常遗忘","总是忘事"]},
+            {id:20, dim:"cognition", text:"工作效率？", opts:["高效","偶尔低效","经常低效","总是低效"]},
+            {id:21, dim:"cognition", text:"思维敏捷性？", opts:["快速","稍慢","经常迟缓","总是迟缓"]},
+            {id:22, dim:"cognition", text:"是否过度担忧细节？", opts:["很少","偶尔","经常","总是"]},
+            {id:23, dim:"cognition", text:"面对多任务时的表现？", opts:["有条不紊","偶尔混乱","经常混乱","难以处理"]},
+            {id:24, dim:"cognition", text:"思维弹性？", opts:["灵活","有时不灵活","经常僵硬","总是僵硬"]},
+            {id:25, dim:"social", text:"与朋友相处，你的压力感？", opts:["很低","有时紧张","经常紧张","总是压力大"]},
+            {id:26, dim:"social", text:"面对家庭责任，你的压力感？", opts:["很低","有时压力","经常压力","总是压力大"]},
+            {id:27, dim:"social", text:"对未来规划的焦虑？", opts:["很少","偶尔","经常","总是"]},
+            {id:28, dim:"social", text:"表达自己意见时？", opts:["自如","有些不安","经常不安","总是紧张"]},
+            {id:29, dim:"social", text:"遇到社交冲突，你的反应？", opts:["冷静应对","偶尔情绪化","经常情绪化","难以控制"]},
+            {id:30, dim:"social", text:"休闲时是否能够真正放松？", opts:["总能","大部分时间","偶尔","很少"]}
+        ]
+    };
+
+    let current = 0;
+    const userScores = { emotion:0, behavior:0, cognition:0, social:0 };
+
+    function init() {
+        const area = document.getElementById('quiz-area');
+        data.questions.forEach((q, i) => {
+            const card = document.createElement('div');
+            card.className = `question-card ${i===0?'active':''}`;
+            card.innerHTML = `<div class="q-text">${i+1}. ${q.text}</div>`;
+            q.opts.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'option';
+                btn.innerText = opt;
+                btn.onclick = () => handleNext(q.dim, idx + 1);
+                card.appendChild(btn);
+            });
+            area.appendChild(card);
+        });
+    }
+
+    function handleNext(dim, score) {
+        userScores[dim] += score;
+        const cards = document.querySelectorAll('.question-card');
+        cards[current].classList.replace('active', 'exit');
+        
+        current++;
+        const percent = Math.round((current / data.questions.length) * 100);
+        document.getElementById('progress').style.width = percent + '%';
+
+        if(current < data.questions.length) {
+            setTimeout(() => cards[current].classList.add('active'), 150);
+        } else {
+            setTimeout(showResult, 400);
+        }
+    }
+
+    function showResult() {
+        document.getElementById('quiz-box').style.display = 'none';
+        let code = "";
+        for(let d in userScores) {
+            code += data.scoring.map[d][userScores[d] > data.scoring.thresholds[d] ? 1 : 0];
+        }
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('res-code').innerText = code;
+        document.getElementById('res-text').innerText = data.scoring.texts[code] || data.scoring.texts.other;
+    }
+
+    init();
+</script>
+</body>
+</html>
